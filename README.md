@@ -4,7 +4,7 @@ A runnable, interview-focused demonstration of six decision use cases using **Ty
 
 ## Architecture and six use cases
 
-![Jev DecisionOps architecture and six Jev decision-model use cases](jev-decisionops-architecture.png)
+![Jev DecisionOps architecture and six Jev decision-model use cases](jev-decisionops-architecture-refined.png)
 
 > **Diagram scope:** Refined from the supplied diagram. The solid architecture shows the implemented decision layer, deterministic policy checks, dashboard outcomes, and inspectable traces. The dashed section shows optional downstream integrations: LLMs, tools and APIs, vector stores, and observability backends. Those integrations are illustrative and are not shipped by this demo. Live inference requires a TypeSafe API key; offline fixtures are explicitly simulated.
 
