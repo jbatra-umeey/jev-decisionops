@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 ENDPOINT = os.getenv('JEV_ENDPOINT','https://api.typesafe.ai/v1/systemone')
-MODE = os.getenv('JEV_MODE','live').lower()
+MODE = os.getenv('JEV_MODE','demo').lower()
 KEY = os.getenv('TYPESAFE_API_KEY','')
 MODEL = os.getenv('JEV_MODEL','jev-latest')
 
@@ -32,10 +32,15 @@ def decide(scenario, user_input):
     spec=SCENARIOS[scenario]
     payload={'model':MODEL,'state':user_input,'questions':spec['questions']}
     start=time.perf_counter()
-    if os.getenv('JEV_MODE', MODE).lower()=='fixture':
+    mode=os.getenv('JEV_MODE', MODE).lower()
+    if mode=='demo':
+        from simulator import simulate_decision
+        answer={'answers':simulate_decision(scenario,user_input)}
+        provenance='OFFLINE SIMULATION — deterministic rules, no Jev API call'
+    elif mode=='fixture':
         answer={'answers':FIXTURES[scenario]}
         provenance='FIXTURE — no Jev API call made'
-    else:
+    elif mode=='live':
         if not KEY: raise ValueError('Live Jev mode requires TYPESAFE_API_KEY. For explicitly simulated rehearsal, set JEV_MODE=fixture.')
         request=urllib.request.Request(ENDPOINT, data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+KEY,'Content-Type':'application/json'},method='POST')
         try:
@@ -45,6 +50,8 @@ def decide(scenario, user_input):
             detail=exc.read(800).decode('utf-8','replace')
             raise ValueError(f'Jev API returned HTTP {exc.code}: {detail}')
         provenance='LIVE JEV API RESPONSE'
+    else:
+        raise ValueError('JEV_MODE must be demo, fixture or live')
     if not isinstance(answer,dict) or not isinstance(answer.get('answers'),dict):
         raise ValueError('Unexpected Jev response: missing answers object')
     return {'scenario':scenario,'input':user_input,'request':payload,'response':answer,'provenance':provenance,'latency_ms':round((time.perf_counter()-start)*1000,1),'policy':enforce_policy(scenario,user_input,answer['answers'])}
@@ -104,4 +111,4 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=='__main__':
     port=int(os.getenv('PORT','8765'))
     print(f'Jev DecisionOps at http://localhost:{port} | mode={MODE} | endpoint={ENDPOINT}',flush=True)
-    ThreadingHTTPServer(('127.0.0.1',port),Handler).serve_forever()
+    ThreadingHTTPServer((os.getenv('HOST','127.0.0.1'),port),Handler).serve_forever()

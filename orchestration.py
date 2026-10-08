@@ -34,7 +34,12 @@ def llm_generate(prompt, context, model_tier, trace, mode=None):
     mode = (mode or os.getenv("LLM_MODE", "fixture")).lower()
     if mode == "fixture":
         trace.record("llm", provider="fixture", model_tier=model_tier)
-        return "According to the runbook: restore the previously approved artifact, run smoke tests, and notify the on-call engineer."
+        from simulator import tokens
+        lines=context.splitlines()
+        best=max(lines,key=lambda line:len(tokens(prompt).intersection(tokens(line))),default='')
+        if not tokens(prompt).intersection(tokens(best)):
+            return 'I do not know: the bundled runbooks do not provide evidence for this request.'
+        return 'According to the runbook: '+best
     if mode != "openai":
         raise ValueError("LLM_MODE must be fixture or openai")
     key = os.getenv("OPENAI_API_KEY")
@@ -90,11 +95,16 @@ def run_workflow(question, *, scenario="rag_answer", llm_mode=None, documents=No
     if scenario not in ("rag_answer", "incident"):
         raise ValueError("Unknown workflow scenario")
     trace = Trace()
-    trace.record("start", scenario=scenario, jev_mode=os.getenv("JEV_MODE", "live"), llm_mode=llm_mode or os.getenv("LLM_MODE", "fixture"))
+    from app import MODE
+    jev_mode=os.getenv('JEV_MODE',MODE)
+    generation_mode=llm_mode or os.getenv('LLM_MODE','fixture')
+    provenance={'decision_mode':jev_mode,'generation_mode':generation_mode,'simulated':jev_mode!='live' or generation_mode!='openai'}
+    trace.record("start", scenario=scenario, **provenance)
     guard = decide("guardrails", question)
     trace.record("jev_guardrail", outcome=guard["policy"]["action"], provenance=guard["provenance"])
     if guard["policy"]["action"] != "CONTINUE":
-        return {"run_id": trace.run_id, "status": "blocked_or_review", "policy": guard["policy"], "trace": trace.events}
+        trace.record('finish',status='blocked_or_review')
+        return {"run_id": trace.run_id, "status": "blocked_or_review", "policy": guard["policy"], 'provenance':provenance, "trace": trace.events}
     passages = retrieve(question, documents)
     trace.record("retrieve", document_ids=[x["id"] for x in passages], backend="lexical")
     ranked = []
@@ -125,7 +135,7 @@ def run_workflow(question, *, scenario="rag_answer", llm_mode=None, documents=No
     status = "completed" if permitted else "human_review"
     result = {"run_id": trace.run_id, "status": status, "answer": answer if permitted else None,
               "evaluation": {"quality": quality, "grounded": grounded},
-              "sources": [x["id"] for x in ranked[:2]], "trace": trace.events}
+              "sources": [x["id"] for x in ranked[:2]], 'evidence':[{'id':x['id'],'text':x['text'],'score':x['jev_score']} for x in ranked[:2]], 'provenance':provenance, "trace": trace.events}
     if scenario == "incident":
         tool_name = "draft_remediation_issue"
         gate = decide("tools", f"Tool: {tool_name}; action: prepare a non-published local draft; actor: demo; environment: sandbox") if permitted else None

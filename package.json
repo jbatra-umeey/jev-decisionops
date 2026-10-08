@@ -1,0 +1,8 @@
+{
+  "name": "jev-decisionops",
+  "private": true,
+  "scripts": {
+    "dev": "JEV_MODE=demo LLM_MODE=fixture HOST=0.0.0.0 PORT=4173 python3 app.py",
+    "test": "python3 -m unittest -v"
+  }
+}

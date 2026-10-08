@@ -1,6 +1,6 @@
-# ⚡ Jev DecisionOps v2 — Executable decision orchestration
+# ⚡ Jev DecisionOps v3 — Executable decision orchestration
 
-A runnable, interview-focused demonstration of six decision use cases using **TypeSafe AI Jev** as the decision engine. The default mode calls the **live Jev API**; fixture mode is explicitly marked as simulated and never described as a real model output.
+A runnable, interview-focused demonstration of six decision use cases using **TypeSafe AI Jev** as the decision engine. The default mode is an **offline end-to-end simulation**: deterministic decision rules, real local retrieval, and extractive generation. Live Jev and OpenAI adapters remain opt-in and require credentials.
 
 Version 2 adds a multi-step workflow API and dashboard: local retrieval → Jev passage scoring → model-tier routing → optional OpenAI generation → answer evaluation → confidence gating → sandbox remediation drafts.
 
@@ -13,8 +13,8 @@ Version 2 adds a multi-step workflow API and dashboard: local retrieval → Jev 
 ## Start (Python 3.10+, zero pip dependencies)
 
 ```bash
-export TYPESAFE_API_KEY='YOUR_TYPESAFE_KEY'
 python app.py
+# Default: offline simulation, no keys needed
 # Open http://localhost:8765
 ```
 
@@ -23,7 +23,7 @@ The configured endpoint defaults to `https://api.typesafe.ai/v1/systemone` with 
 To rehearse **without a Jev key** (no real inference):
 
 ```bash
-JEV_MODE=fixture python app.py
+JEV_MODE=demo LLM_MODE=fixture python app.py
 ```
 
 ## Workflows
@@ -82,8 +82,8 @@ flowchart TD
 The new `orchestration.py` adds **local lexical retrieval**, Jev-based per-passage scoring, Jev LLM-tier selection, an optional real OpenAI LLM call, Jev answer evaluation, fail-closed outcome escalation, and a **sandbox-only** remediation-issue drafting tool. It emits a per-stage structured trace. This is an executable orchestration pipeline, **not** a production deployment.
 
 ```bash
-# All Jev outputs are fixed fixtures (guardrails intentionally block input)
-JEV_MODE=fixture LLM_MODE=fixture python app.py
+# Interactive end-to-end simulation (safe requests complete; unsupported requests escalate)
+JEV_MODE=demo LLM_MODE=fixture python app.py
 # Use the new POST /api/workflow endpoint, for instance:
 curl -s localhost:8765/api/workflow -H 'Content-Type: application/json' \
   -d '{"question":"How to rollback a failed deployment?","scenario":"rag_answer"}'
@@ -92,12 +92,23 @@ curl -s localhost:8765/api/workflow -H 'Content-Type: application/json' \
 TYPESAFE_API_KEY=... OPENAI_API_KEY=... JEV_MODE=live LLM_MODE=openai python app.py
 ```
 
-**Important:** Fixture mode deliberately uses the same fixed high-risk guardrail response from v1 and therefore blocks workflows at that stage; successful path is verified by **mocking Jev outputs in integration tests**. A realistic offline simulator is not shipped. Jev response format and credentialed live E2E were not independently verified. The local lexical retriever is not vector RAG. Drafted issues are in-memory artifacts, not GitHub tickets. `write_local_report` is restricted to a sandbox folder and requires explicit approval; no destructive operations are enabled.
+**Offline demo:** `JEV_MODE=demo` uses input-dependent deterministic rules rather than live inference. Safe runbook requests complete, prompt-injection examples block before generation, and unsupported or uncertain requests withhold the answer for review. `LLM_MODE=fixture` selects and copies a relevant passage from the supplied context rather than returning a constant answer. The UI shows each executed stage, source text, evaluation, outcome and explicit provenance. Incident runs create a downloadable JSON draft; no GitHub issue is published. You can download the full trace as JSON. Legacy `JEV_MODE=fixture` remains available for fixed-response regression tests and deliberately blocks at screening. These illustrative rules are not a production risk classifier.
 
 Tests: `python -m unittest -v`. The authenticated live path requires API credentials and external network access. Never commit credentials.
 
 ### Orchestration policy details
 
-For an approved response, Jev evaluates answer quality and grounding, then provides a **confidence decision** which must pass the deterministic `PROCEED` threshold; low scores or uncertain decisions escalate without returning the drafted answer. In the incident scenario, Jev additionally assesses the sandbox draft tool, and a deterministic allowlist enforces the final action. All stages appear in the audit trace. CI runs all 11 isolated tests with no API credentials; live service calls are stubbed in successful-path tests.
+For an approved response, Jev evaluates answer quality and grounding, then provides a **confidence decision** which must pass the deterministic `PROCEED` threshold; low scores or uncertain decisions escalate without returning the drafted answer. In the incident scenario, Jev additionally assesses the sandbox draft tool, and a deterministic allowlist enforces the final action. All stages appear in the audit trace. CI runs all 16 tests without API credentials. Five new offline end-to-end tests use the actual simulator and orchestration without mocking decisions; live-provider behavior is still unverified.
 
 `GET /health`, `GET /api/scenarios`, `POST /api/decide` (single decision) and `POST /api/workflow` (multi-step workflow) are available. The server binds to `127.0.0.1` by default and is not designed to be internet-exposed. No real human approval backend, vector database, persistent trace store, or production authorization layer is included. For deployment, add authentication, rate limiting, secret management, prompt-injection robustness tests, schema validation, and durable audit storage.
+
+## Run the end-to-end UI
+
+1. Run `python app.py` and open `http://localhost:8765`.
+2. Click **Rollback answer**, then **Run end-to-end workflow**. Expect **Completed**, a runbook answer, evidence and nine pipeline stages.
+3. Click **Latency incident**, then run. Expect **Completed** and a sandbox draft. Use **Download incident draft** to save it.
+4. Click **Blocked request**, then run. Expect **Blocked**, with no generation or tool execution.
+5. Click **Missing evidence**, then run. Expect **Human review required** and no released answer.
+6. Use **Download trace** or expand **Full workflow trace** to inspect provenance and all executed stages.
+
+The six individual decision labs remain below the main workflow. Mode is controlled by the server; the UI cannot switch on live providers or expose keys. The optional `npm run dev` command starts the same Python app in offline mode on port 4173 for supervised browser previews; normal local use requires only Python. `HOST` defaults to loopback; keep that default for local use.
