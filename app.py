@@ -32,7 +32,7 @@ def decide(scenario, user_input):
     spec=SCENARIOS[scenario]
     payload={'model':MODEL,'state':user_input,'questions':spec['questions']}
     start=time.perf_counter()
-    if MODE=='fixture':
+    if os.getenv('JEV_MODE', MODE).lower()=='fixture':
         answer={'answers':FIXTURES[scenario]}
         provenance='FIXTURE — no Jev API call made'
     else:
@@ -80,6 +80,16 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path=='/health':self.send(200,{'ok':True,'mode':MODE})
         else:self.send(404,{'error':'Not found'})
     def do_POST(self):
+        if self.path=='/api/workflow':
+            try:
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0 < length <= 100_000: raise ValueError('Invalid request length')
+                data=json.loads(self.rfile.read(length))
+                from orchestration import run_workflow
+                result=run_workflow(data.get('question',''),scenario=data.get('scenario','rag_answer'))
+                return self.send(200,result)
+            except ValueError as exc: return self.send(400,{'error':str(exc)})
+            except Exception as exc: return self.send(502,{'error':f'Workflow failed ({type(exc).__name__}): {exc}'})
         if self.path!='/api/decide':return self.send(404,{'error':'Not found'})
         try:
             length=int(self.headers.get('Content-Length','0'))

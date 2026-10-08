@@ -1,12 +1,14 @@
-# ⚡ Jev DecisionOps — Six real-world decision-model workflows
+# ⚡ Jev DecisionOps v2 — Executable decision orchestration
 
 A runnable, interview-focused demonstration of six decision use cases using **TypeSafe AI Jev** as the decision engine. The default mode calls the **live Jev API**; fixture mode is explicitly marked as simulated and never described as a real model output.
+
+Version 2 adds a multi-step workflow API and dashboard: local retrieval → Jev passage scoring → model-tier routing → optional OpenAI generation → answer evaluation → confidence gating → sandbox remediation drafts.
 
 ## Architecture and six use cases
 
 ![Jev DecisionOps architecture and six Jev decision-model use cases](jev-decisionops-architecture-refined.png)
 
-> **Diagram scope:** Refined from the supplied diagram. The solid architecture shows the implemented decision layer, deterministic policy checks, dashboard outcomes, and inspectable traces. The dashed section shows optional downstream integrations: LLMs, tools and APIs, vector stores, and observability backends. Those integrations are illustrative and are not shipped by this demo. Live inference requires a TypeSafe API key; offline fixtures are explicitly simulated.
+> **Diagram scope:** The refined diagram summarizes the six decision primitives and deterministic policy boundary. v2 implements local lexical retrieval, an optional OpenAI generation adapter, in-memory remediation drafts, and per-stage traces. Vector databases, externally executed tools, observability backends, and a real human approval service remain future integrations. The image is an architectural overview, not proof of credentialed live execution.
 
 ## Start (Python 3.10+, zero pip dependencies)
 
@@ -24,15 +26,9 @@ To rehearse **without a Jev key** (no real inference):
 JEV_MODE=fixture python app.py
 ```
 
-## Validation
-
-```bash
-python -m unittest -v
-```
-
-The policy tests cover deterministic blocking, unknown classifications, confidence thresholds, and all six scenario definitions. Offline fixture outputs are fixed rehearsal examples and do not change with the input. Live inference requires a TypeSafe API key and has not been validated in this publishing session.
-
 ## Workflows
+
+The six single-decision scenarios remain available. The v2 orchestration endpoint composes these decisions with retrieval, optional generation, evaluation and sandbox actions.
 
 | Workload | Jev primitive | Downstream action |
 |---|---|---|
@@ -45,15 +41,25 @@ The policy tests cover deterministic blocking, unknown classifications, confiden
 
 ## System boundary
 
-```
-Browser → Python application → Jev decision API → typed answers
-                             ↓
-                   Deterministic policy evaluation
-                             ↓
-                     Outcome + inspectable trace
+```mermaid
+flowchart TD
+    A[Workflow request] --> B[Jev prompt screening]
+    B -->|Allowed| C[Local lexical retrieval]
+    B -->|Blocked or uncertain| R[Block or review]
+    C --> D[Jev passage scoring]
+    D --> E[Jev model routing]
+    E --> F[OpenAI or fixture answer]
+    F --> G[Jev answer evaluation]
+    G -->|Insufficient quality| R
+    G -->|Passed| H[Jev confidence decision]
+    H -->|Review or confirm| R
+    H -->|Proceed| I[Grounded answer]
+    I -->|Incident workflow| J[Jev sandbox tool gate]
+    J -->|Allowed| K[In-memory issue draft]
+    J -->|Approval needed| R
 ```
 
-**Not implemented:** real GitHub/tool execution, LLM inference, retrieval infrastructure, human approval service, distributed tracing, production access control. The demo does not manufacture evidence of these integrations. Before production: validate Jev's response contract and confidence scales against your account, create labeled datasets, measure per-task precision/recall and calibration, add authentication and RBAC, secret management, audit retention, retries, monitoring, and human-review queues.
+**Not implemented:** published GitHub issues or production tool actions, vector retrieval infrastructure, a human approval service, distributed tracing, or production access control. Live OpenAI inference is implemented as an optional adapter; credentialed live end-to-end execution remains unverified. The demo does not manufacture evidence of these integrations. Before production: validate Jev's response contract and confidence scales against your account, create labeled datasets, measure per-task precision/recall and calibration, add authentication and RBAC, secret management, audit retention, retries, monitoring, and human-review queues.
 
 ## Interview narration (5–7 min)
 
@@ -70,3 +76,28 @@ Browser → Python application → Jev decision API → typed answers
 - https://www.jevtypesafeai.com/jev/api (community API guide)
 
 **Note:** Community documentation may differ from your actual TypeSafe account's contract. The default endpoint has not been tested with a real key by this repository author.
+
+## Executable orchestrated workflows (v2)
+
+The new `orchestration.py` adds **local lexical retrieval**, Jev-based per-passage scoring, Jev LLM-tier selection, an optional real OpenAI LLM call, Jev answer evaluation, fail-closed outcome escalation, and a **sandbox-only** remediation-issue drafting tool. It emits a per-stage structured trace. This is an executable orchestration pipeline, **not** a production deployment.
+
+```bash
+# All Jev outputs are fixed fixtures (guardrails intentionally block input)
+JEV_MODE=fixture LLM_MODE=fixture python app.py
+# Use the new POST /api/workflow endpoint, for instance:
+curl -s localhost:8765/api/workflow -H 'Content-Type: application/json' \
+  -d '{"question":"How to rollback a failed deployment?","scenario":"rag_answer"}'
+
+# Live Jev + live OpenAI (requires verified Jev endpoint/response contract)
+TYPESAFE_API_KEY=... OPENAI_API_KEY=... JEV_MODE=live LLM_MODE=openai python app.py
+```
+
+**Important:** Fixture mode deliberately uses the same fixed high-risk guardrail response from v1 and therefore blocks workflows at that stage; successful path is verified by **mocking Jev outputs in integration tests**. A realistic offline simulator is not shipped. Jev response format and credentialed live E2E were not independently verified. The local lexical retriever is not vector RAG. Drafted issues are in-memory artifacts, not GitHub tickets. `write_local_report` is restricted to a sandbox folder and requires explicit approval; no destructive operations are enabled.
+
+Tests: `python -m unittest -v`. The authenticated live path requires API credentials and external network access. Never commit credentials.
+
+### Orchestration policy details
+
+For an approved response, Jev evaluates answer quality and grounding, then provides a **confidence decision** which must pass the deterministic `PROCEED` threshold; low scores or uncertain decisions escalate without returning the drafted answer. In the incident scenario, Jev additionally assesses the sandbox draft tool, and a deterministic allowlist enforces the final action. All stages appear in the audit trace. CI runs all 11 isolated tests with no API credentials; live service calls are stubbed in successful-path tests.
+
+`GET /health`, `GET /api/scenarios`, `POST /api/decide` (single decision) and `POST /api/workflow` (multi-step workflow) are available. The server binds to `127.0.0.1` by default and is not designed to be internet-exposed. No real human approval backend, vector database, persistent trace store, or production authorization layer is included. For deployment, add authentication, rate limiting, secret management, prompt-injection robustness tests, schema validation, and durable audit storage.
