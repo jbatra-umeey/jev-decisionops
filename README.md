@@ -6,7 +6,7 @@ A runnable, interview-focused demonstration of six decision use cases using **Ty
 
 ![Jev DecisionOps architecture and six Jev decision-model use cases](jev-decisionops-architecture.png)
 
-> **Diagram scope:** This adapted visualization shows the intended system architecture and all six scenarios. The current runnable repository implements the Jev-backed decision layer, deterministic policy evaluation, a dashboard, and traces; external LLMs, vector databases, agent tool execution, and observability backends shown in the architecture are illustrative, not shipped integrations. Benchmark savings shown in the source illustration are not measured by this project.
+> **Diagram scope:** Refined from the supplied diagram. The solid architecture shows the implemented decision layer, deterministic policy checks, dashboard outcomes, and inspectable traces. The dashed section shows optional downstream integrations: LLMs, tools and APIs, vector stores, and observability backends. Those integrations are illustrative and are not shipped by this demo. Live inference requires a TypeSafe API key; offline fixtures are explicitly simulated.
 
 ## Start (Python 3.10+, zero pip dependencies)
 
